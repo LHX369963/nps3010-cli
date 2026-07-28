@@ -1,0 +1,2 @@
+# Allow logged-in desktop users to access QinHeng CH340 serial adapters.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", TAG+="uaccess"
