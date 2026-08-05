@@ -35,6 +35,11 @@ psuctl --device all state
 psuctl --port /dev/ttyUSB0 --port /dev/ttyUSB1 --device all state
 ```
 
+Use `list` only when the ports are unknown. Explicit `--port` paths are opened
+directly without serial-port enumeration. Normal control does not require a
+separate `list`/`state` preflight, configuration snapshot, restoration, or
+post-operation health check; typed writes perform their own targeted readback.
+
 `--device` is a global option and must precede the subcommand. More than two
 candidate/explicit ports are rejected rather than controlling an unintended
 adapter.
