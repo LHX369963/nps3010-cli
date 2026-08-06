@@ -29,6 +29,21 @@ def test_parse_adc():
     assert reading.current_pin_v == 0.081
 
 
+def test_parse_extended_state():
+    state = parse_state(
+        "STATE output=0 setU=4100 mV setI=100 mA actualU=0 mV "
+        "actualI=0 mA actualP=0 mW view=set vdigit=0 idigit=1 "
+        "cc=0 settling=1 fault=NONE"
+    )
+    assert state.output is False
+    assert state.selected_digit is None
+    assert state.selected_voltage_digit == 0
+    assert state.selected_current_digit == 1
+    assert state.constant_current is False
+    assert state.settling is True
+    assert state.fault == "NONE"
+
+
 def test_reject_bad_state():
     with pytest.raises(ProtocolError):
         parse_state("OK STATE")

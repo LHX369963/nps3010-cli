@@ -83,6 +83,8 @@ def monitor(args: argparse.Namespace, devices: list[tuple[int, str, PSU]]) -> No
     fields = [
         "timestamp", "slot", "port", "sequence", "output", "set_voltage_v",
         "set_current_a", "voltage_v", "current_a", "power_w", "view", "selected_digit",
+        "selected_voltage_digit", "selected_current_digit", "constant_current",
+        "settling", "fault",
     ]
     writer = csv.DictWriter(output, fieldnames=fields) if args.format == "csv" else None
     if writer:

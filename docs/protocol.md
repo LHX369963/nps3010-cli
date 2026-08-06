@@ -16,6 +16,10 @@ end in LF (the firmware also accepts CR/CRLF).
 | `SET <vcode> <icode>` | Set raw DAC codes (expert use) | `OK SET ...` |
 | `CAL?` | Show calibration metadata and coefficients | multiple `CAL ...` lines |
 
+Current firmware reports separate `vdigit`/`idigit` selectors plus `cc`,
+`settling`, and `fault` in `STATE`; the parser also accepts the earlier single
+`digit` field.
+
 The optically isolated receive path is deliberately slow and can corrupt a
 line. `psuctl` therefore retries typed commands until the expected response is
 seen and verifies changes through `STATE`. `raw` is intentionally not retried,

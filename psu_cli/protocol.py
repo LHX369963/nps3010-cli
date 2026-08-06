@@ -13,7 +13,9 @@ STATE_RE = re.compile(
     r"setU=(?P<set_u>\d+) mV setI=(?P<set_i>\d+) mA "
     r"actualU=(?P<actual_u>\d+) mV actualI=(?P<actual_i>\d+) mA "
     r"actualP=(?P<actual_p>\d+) mW view=(?P<view>set|live) "
-    r"digit=(?P<digit>\d+)$"
+    r"(?:digit=(?P<digit>\d+)|"
+    r"vdigit=(?P<vdigit>\d+) idigit=(?P<idigit>\d+) "
+    r"cc=(?P<cc>[01]) settling=(?P<settling>[01]) fault=(?P<fault>\S+))$"
 )
 
 ADC_RE = re.compile(
@@ -32,7 +34,12 @@ class State:
     current_a: float
     power_w: float
     view: str
-    selected_digit: int
+    selected_digit: int | None
+    selected_voltage_digit: int | None = None
+    selected_current_digit: int | None = None
+    constant_current: bool = False
+    settling: bool = False
+    fault: str = "NONE"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -62,7 +69,16 @@ def parse_state(line: str) -> State:
         current_a=int(values["actual_i"]) / 1000,
         power_w=int(values["actual_p"]) / 1000,
         view=values["view"],
-        selected_digit=int(values["digit"]),
+        selected_digit=int(values["digit"]) if values["digit"] is not None else None,
+        selected_voltage_digit=(
+            int(values["vdigit"]) if values["vdigit"] is not None else None
+        ),
+        selected_current_digit=(
+            int(values["idigit"]) if values["idigit"] is not None else None
+        ),
+        constant_current=values["cc"] == "1",
+        settling=values["settling"] == "1",
+        fault=values["fault"] or "NONE",
     )
 
 
