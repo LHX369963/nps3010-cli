@@ -115,13 +115,6 @@ class SerialTransport:
     def command(self, command: str) -> list[str]:
         try:
             self.serial.reset_input_buffer()
-            # Automatic telemetry is enabled at boot.  Pause it for the brief
-            # request/response transaction so legacy ASCII parsing remains
-            # deterministic, then restore streaming before returning.
-            self.serial.write(self.encode("TELEM OFF"))
-            self.serial.flush()
-            time.sleep(0.08)
-            self.serial.reset_input_buffer()
             self.serial.write(self.encode(command))
             self.serial.flush()
             lines: list[str] = []
@@ -159,9 +152,6 @@ class SerialTransport:
                         ascii_line.extend(raw)
                 elif lines and time.monotonic() - last_data >= self.quiet:
                     break
-            if command != "TELEM OFF":
-                self.serial.write(self.encode("TELEM ON"))
-                self.serial.flush()
             return lines
         except (OSError, serial.SerialException, serial.SerialTimeoutException) as exc:
             raise TransportError(f"serial I/O failed on {self.port}: {exc}") from exc
@@ -187,6 +177,8 @@ class SerialTransport:
     def telemetry(self, duration: float = 0, count: int = 0):
         started = time.monotonic()
         matched = 0
+        previous_sequence: int | None = None
+        elapsed_steps = 0
         while (not duration or time.monotonic() - started < duration) and (
             not count or matched < count
         ):
@@ -202,6 +194,14 @@ class SerialTransport:
                 record = parse_telemetry(TELEMETRY_SOF + rest)
             except ProtocolError:
                 continue
+            if previous_sequence is not None:
+                elapsed_steps += (record.sequence - previous_sequence) & 0xFFFF
+            previous_sequence = record.sequence
+            # The compact wire frame omits a timestamp. Expose an unwrapped,
+            # capture-relative device time while retaining raw sequence.
+            record = Telemetry(
+                **(record.to_dict() | {"device_time_ms": elapsed_steps * 50})
+            )
             matched += 1
             yield record
 

@@ -27,7 +27,7 @@ ADC_RE = re.compile(
 )
 
 TELEMETRY_SOF = b"\xA5\x5A"
-TELEMETRY_FRAME_SIZE = 18
+TELEMETRY_FRAME_SIZE = 12
 
 
 @dataclass(frozen=True)
@@ -85,25 +85,26 @@ def crc16_ccitt(data: bytes) -> int:
 def parse_telemetry(frame: bytes) -> Telemetry:
     if len(frame) != TELEMETRY_FRAME_SIZE or frame[:2] != TELEMETRY_SOF:
         raise ProtocolError("invalid telemetry frame")
-    expected, = struct.unpack_from("<H", frame, 16)
-    if crc16_ccitt(frame[:16]) != expected:
+    expected, = struct.unpack_from("<H", frame, 10)
+    if crc16_ccitt(frame[:10]) != expected:
         raise ProtocolError("telemetry CRC mismatch")
-    version, flags, sequence, device_time_ms, voltage_mv, current_ma, fault = (
-        struct.unpack_from("<BBHIHHB", frame, 2)
+    version, sequence, voltage_mv, current_ma, status = struct.unpack_from(
+        "<BHHHB", frame, 2
     )
-    if version != 1:
+    if version != 2:
         raise ProtocolError(f"unsupported telemetry version {version}")
+    fault = (status >> 2) & 0x03
     fault_names = {0: "NONE", 1: "VOLTAGE", 2: "OVERCURRENT"}
     return Telemetry(
         version=version,
         sequence=sequence,
-        device_time_ms=device_time_ms,
+        device_time_ms=sequence * 50,
         voltage_v=voltage_mv / 1000,
         current_a=current_ma / 1000,
         power_w=voltage_mv * current_ma / 1_000_000,
-        output=bool(flags & 1),
-        constant_current=bool(flags & 2),
-        settling=bool(flags & 4),
+        output=bool(status & 1),
+        constant_current=bool(status & 2),
+        settling=False,
         fault=fault_names.get(fault, f"UNKNOWN_{fault}"),
     )
 

@@ -53,20 +53,20 @@ def test_reject_bad_state():
 
 def test_parse_binary_telemetry():
     frame = bytearray(b"\xA5\x5A")
-    frame += struct.pack("<BBHIHHBB", 1, 0b111, 65534, 123456, 15029, 1122, 0, 0)
+    frame += struct.pack("<BHHHB", 2, 1234, 15029, 1122, 0b11)
     frame += struct.pack("<H", crc16_ccitt(frame))
     item = parse_telemetry(bytes(frame))
-    assert item.sequence == 65534
-    assert item.device_time_ms == 123456
+    assert item.sequence == 1234
+    assert item.device_time_ms == 61700
     assert item.voltage_v == 15.029
     assert item.current_a == 1.122
     assert item.power_w == 16.862538
-    assert item.output and item.constant_current and item.settling
+    assert item.output and item.constant_current and not item.settling
     assert item.fault == "NONE"
 
 
 def test_reject_bad_telemetry_crc():
-    frame = bytearray(18)
-    frame[:4] = b"\xA5\x5A\x01\x00"
+    frame = bytearray(12)
+    frame[:3] = b"\xA5\x5A\x02"
     with pytest.raises(ProtocolError, match="CRC"):
         parse_telemetry(bytes(frame))
