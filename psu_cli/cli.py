@@ -51,6 +51,12 @@ def parser() -> argparse.ArgumentParser:
     monitor.add_argument("--format", choices=("jsonl", "csv"), default="jsonl")
     monitor.add_argument("--output", type=Path)
 
+    telemetry = sub.add_parser("telemetry", help="capture automatic 20 Hz binary telemetry")
+    telemetry.add_argument("--count", type=int, default=0, help="0 means unlimited")
+    telemetry.add_argument("--duration", type=float, default=0, help="seconds; 0 means unlimited")
+    telemetry.add_argument("--format", choices=("jsonl", "csv"), default="jsonl")
+    telemetry.add_argument("--output", type=Path)
+
     raw = sub.add_parser("raw", help="send one firmware command")
     raw.add_argument("line")
     return ap
@@ -114,6 +120,33 @@ def monitor(args: argparse.Namespace, devices: list[tuple[int, str, PSU]]) -> No
             output.close()
 
 
+def capture_telemetry(args: argparse.Namespace, devices: list[tuple[int, str, PSU]]) -> None:
+    if len(devices) != 1:
+        raise ProtocolError("telemetry capture supports one selected PSU")
+    if args.count < 0 or args.duration < 0 or (not args.count and not args.duration):
+        raise ProtocolError("telemetry requires positive --count or --duration")
+    slot, port, psu = devices[0]
+    output = args.output.open("w", newline="", encoding="utf-8") if args.output else sys.stdout
+    fields = ["timestamp", "slot", "port", "version", "sequence", "device_time_ms",
+              "voltage_v", "current_a", "power_w", "output", "constant_current",
+              "settling", "fault"]
+    writer = csv.DictWriter(output, fieldnames=fields) if args.format == "csv" else None
+    if writer:
+        writer.writeheader()
+    try:
+        for item in psu.transport.telemetry(args.duration, args.count):
+            record = {"timestamp": timestamp(), "slot": slot, "port": port} | item.to_dict()
+            if writer:
+                writer.writerow(record)
+                output.flush()
+            else:
+                print(json.dumps(record, ensure_ascii=False, sort_keys=True,
+                                 separators=(",", ":")), file=output, flush=True)
+    finally:
+        if args.output:
+            output.close()
+
+
 def run(args: argparse.Namespace) -> int:
     if args.timeout <= 0 or args.retries < 0:
         raise ProtocolError("timeout must be positive and retries cannot be negative")
@@ -125,6 +158,9 @@ def run(args: argparse.Namespace) -> int:
         devices = connect_all(args, stack)
         if args.command == "monitor":
             monitor(args, devices)
+            return 0
+        if args.command == "telemetry":
+            capture_telemetry(args, devices)
             return 0
         for slot, port, psu in devices:
             if args.command == "state":

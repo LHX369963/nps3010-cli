@@ -1,5 +1,16 @@
 # Monitor supplies
 
+For high-rate acquisition, use automatic 20 Hz binary telemetry:
+
+```bash
+psuctl --device 1 telemetry --duration 20 --format csv \
+  --output captures/startup.csv
+```
+
+The CRC-protected frame includes a device timestamp and sequence number, making
+timing and dropped frames auditable. Prefer this to repeated `STATE` polling for
+startup curves.
+
 Write compact JSONL or CSV while keeping a finite capture bound:
 
 ```bash

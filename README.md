@@ -35,6 +35,13 @@ psuctl --port /dev/ttyUSB0 --port /dev/ttyUSB1 --device all state
 Normal control needs no prior `list`/`state`, saved configuration, restoration,
 or post-operation health check. `--device` precedes its subcommand.
 
+Firmware with automatic telemetry can be captured at 20 Hz without polling:
+
+```bash
+psuctl --device 1 telemetry --duration 20 --format csv \
+  --output captures/startup.csv
+```
+
 ## Guides
 
 - [Control, simultaneous units, and display](docs/usage/control.md)

@@ -10,7 +10,14 @@ import serial
 from serial.tools import list_ports
 
 from .errors import ProtocolError, TransportError
-from .protocol import State, parse_state
+from .protocol import (
+    TELEMETRY_FRAME_SIZE,
+    TELEMETRY_SOF,
+    State,
+    Telemetry,
+    parse_state,
+    parse_telemetry,
+)
 
 
 VID = 0x1A86
@@ -108,20 +115,53 @@ class SerialTransport:
     def command(self, command: str) -> list[str]:
         try:
             self.serial.reset_input_buffer()
+            # Automatic telemetry is enabled at boot.  Pause it for the brief
+            # request/response transaction so legacy ASCII parsing remains
+            # deterministic, then restore streaming before returning.
+            self.serial.write(self.encode("TELEM OFF"))
+            self.serial.flush()
+            time.sleep(0.08)
+            self.serial.reset_input_buffer()
             self.serial.write(self.encode(command))
             self.serial.flush()
             lines: list[str] = []
             deadline = time.monotonic() + self.timeout
             last_data = time.monotonic()
+            ascii_line = bytearray()
             while time.monotonic() < deadline:
-                raw = self.serial.readline()
+                raw = self.serial.read(1)
                 if raw:
                     last_data = time.monotonic()
-                    text = raw.decode("ascii", "replace").strip()
-                    if text:
-                        lines.append(text)
+                    if raw == TELEMETRY_SOF[:1]:
+                        second = self.serial.read(1)
+                        if second == TELEMETRY_SOF[1:]:
+                            rest = self.serial.read(TELEMETRY_FRAME_SIZE - 2)
+                            if len(rest) == TELEMETRY_FRAME_SIZE - 2:
+                                try:
+                                    parse_telemetry(raw + second + rest)
+                                    continue
+                                except ProtocolError:
+                                    ascii_line.extend(raw + second + rest)
+                            else:
+                                ascii_line.extend(raw + second + rest)
+                        else:
+                            ascii_line.extend(raw + second)
+                    elif raw in (b"\r", b"\n"):
+                        text = ascii_line.decode("ascii", "replace").strip()
+                        ascii_line.clear()
+                        if text:
+                            lines.append(text)
+                            # All routine CLI responses have a known first line;
+                            # avoid the legacy 120 ms quiet wait where possible.
+                            if command == "STATE" and text.startswith("STATE "):
+                                break
+                    else:
+                        ascii_line.extend(raw)
                 elif lines and time.monotonic() - last_data >= self.quiet:
                     break
+            if command != "TELEM OFF":
+                self.serial.write(self.encode("TELEM ON"))
+                self.serial.flush()
             return lines
         except (OSError, serial.SerialException, serial.SerialTimeoutException) as exc:
             raise TransportError(f"serial I/O failed on {self.port}: {exc}") from exc
@@ -143,6 +183,27 @@ class SerialTransport:
         lines = self.command_until("STATE", "STATE ")
         line = next(line for line in lines if line.startswith("STATE "))
         return parse_state(line)
+
+    def telemetry(self, duration: float = 0, count: int = 0):
+        started = time.monotonic()
+        matched = 0
+        while (not duration or time.monotonic() - started < duration) and (
+            not count or matched < count
+        ):
+            byte = self.serial.read(1)
+            if byte != TELEMETRY_SOF[:1]:
+                continue
+            if self.serial.read(1) != TELEMETRY_SOF[1:]:
+                continue
+            rest = self.serial.read(TELEMETRY_FRAME_SIZE - 2)
+            if len(rest) != TELEMETRY_FRAME_SIZE - 2:
+                continue
+            try:
+                record = parse_telemetry(TELEMETRY_SOF + rest)
+            except ProtocolError:
+                continue
+            matched += 1
+            yield record
 
     def __enter__(self) -> "SerialTransport":
         return self.open()

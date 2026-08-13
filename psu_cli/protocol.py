@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import binascii
+import struct
 from dataclasses import asdict, dataclass
 
 from .errors import ProtocolError
@@ -23,6 +25,9 @@ ADC_RE = re.compile(
     r"\((?P<voltage_mv>\d+) mV\), current_feedback=(?P<current_raw>\d+) "
     r"\((?P<current_mv>\d+) mV\)$"
 )
+
+TELEMETRY_SOF = b"\xA5\x5A"
+TELEMETRY_FRAME_SIZE = 18
 
 
 @dataclass(frozen=True)
@@ -54,6 +59,53 @@ class ADCReading:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class Telemetry:
+    version: int
+    sequence: int
+    device_time_ms: int
+    voltage_v: float
+    current_a: float
+    power_w: float
+    output: bool
+    constant_current: bool
+    settling: bool
+    fault: str
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def crc16_ccitt(data: bytes) -> int:
+    return binascii.crc_hqx(data, 0xFFFF)
+
+
+def parse_telemetry(frame: bytes) -> Telemetry:
+    if len(frame) != TELEMETRY_FRAME_SIZE or frame[:2] != TELEMETRY_SOF:
+        raise ProtocolError("invalid telemetry frame")
+    expected, = struct.unpack_from("<H", frame, 16)
+    if crc16_ccitt(frame[:16]) != expected:
+        raise ProtocolError("telemetry CRC mismatch")
+    version, flags, sequence, device_time_ms, voltage_mv, current_ma, fault = (
+        struct.unpack_from("<BBHIHHB", frame, 2)
+    )
+    if version != 1:
+        raise ProtocolError(f"unsupported telemetry version {version}")
+    fault_names = {0: "NONE", 1: "VOLTAGE", 2: "OVERCURRENT"}
+    return Telemetry(
+        version=version,
+        sequence=sequence,
+        device_time_ms=device_time_ms,
+        voltage_v=voltage_mv / 1000,
+        current_a=current_ma / 1000,
+        power_w=voltage_mv * current_ma / 1_000_000,
+        output=bool(flags & 1),
+        constant_current=bool(flags & 2),
+        settling=bool(flags & 4),
+        fault=fault_names.get(fault, f"UNKNOWN_{fault}"),
+    )
 
 
 def parse_state(line: str) -> State:

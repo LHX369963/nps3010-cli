@@ -1,7 +1,9 @@
+import struct
+
 import pytest
 
 from psu_cli.errors import ProtocolError
-from psu_cli.protocol import parse_adc, parse_state
+from psu_cli.protocol import crc16_ccitt, parse_adc, parse_state, parse_telemetry
 
 
 def test_parse_state():
@@ -47,3 +49,24 @@ def test_parse_extended_state():
 def test_reject_bad_state():
     with pytest.raises(ProtocolError):
         parse_state("OK STATE")
+
+
+def test_parse_binary_telemetry():
+    frame = bytearray(b"\xA5\x5A")
+    frame += struct.pack("<BBHIHHBB", 1, 0b111, 65534, 123456, 15029, 1122, 0, 0)
+    frame += struct.pack("<H", crc16_ccitt(frame))
+    item = parse_telemetry(bytes(frame))
+    assert item.sequence == 65534
+    assert item.device_time_ms == 123456
+    assert item.voltage_v == 15.029
+    assert item.current_a == 1.122
+    assert item.power_w == 16.862538
+    assert item.output and item.constant_current and item.settling
+    assert item.fault == "NONE"
+
+
+def test_reject_bad_telemetry_crc():
+    frame = bytearray(18)
+    frame[:4] = b"\xA5\x5A\x01\x00"
+    with pytest.raises(ProtocolError, match="CRC"):
+        parse_telemetry(bytes(frame))
