@@ -1,4 +1,4 @@
-"""Typed operations on one custom PSU."""
+"""Typed operations on one NPS3010."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from .protocol import ADCReading, State, parse_adc
 from .transport import SerialTransport
 
 
-class PSU:
+class NPS3010:
     def __init__(self, transport: SerialTransport) -> None:
         self.transport = transport
 

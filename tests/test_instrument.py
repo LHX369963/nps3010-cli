@@ -1,4 +1,4 @@
-from psu_cli.instrument import PSU
+from nps3010_cli.instrument import NPS3010
 
 
 class FakeTransport:
@@ -26,7 +26,7 @@ class FakeTransport:
         return [prefix]
 
     def state(self):
-        from psu_cli.protocol import State
+        from nps3010_cli.protocol import State
 
         return State(
             self.enabled, self.voltage, self.current, 0.0, 0.0, 0.0, self.mode, 0
@@ -35,7 +35,7 @@ class FakeTransport:
 
 def test_set_and_verify():
     transport = FakeTransport()
-    state = PSU(transport).set_targets(12.345, 2.5)
+    state = NPS3010(transport).set_targets(12.345, 2.5)
     assert transport.commands == ["VSET 12345", "ISET 2500"]
     assert state.set_voltage_v == 12.345
     assert state.set_current_a == 2.5
@@ -43,13 +43,13 @@ def test_set_and_verify():
 
 def test_output_zero_and_view():
     transport = FakeTransport()
-    psu = PSU(transport)
-    assert psu.output(True).output is True
-    assert psu.zero().output is False
-    assert psu.view("live").view == "live"
+    supply = NPS3010(transport)
+    assert supply.output(True).output is True
+    assert supply.zero().output is False
+    assert supply.view("live").view == "live"
 
 
 def test_read_adc():
-    reading = PSU(FakeTransport()).read_adc()
+    reading = NPS3010(FakeTransport()).read_adc()
     assert reading.voltage_raw == 12
     assert reading.current_raw == 34

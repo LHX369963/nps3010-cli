@@ -21,6 +21,6 @@ Current firmware reports separate `vdigit`/`idigit` selectors plus `cc`,
 `digit` field.
 
 The optically isolated receive path is deliberately slow and can corrupt a
-line. `psuctl` therefore retries typed commands until the expected response is
+line. `nps3010` therefore retries typed commands until the expected response is
 seen and verifies changes through `STATE`. `raw` is intentionally not retried,
 because arbitrary commands may not be idempotent.

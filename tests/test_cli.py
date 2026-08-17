@@ -1,7 +1,7 @@
 import json
 
-from psu_cli import cli
-from psu_cli.protocol import State
+from nps3010_cli import cli
+from nps3010_cli.protocol import State
 
 
 class FakeContext:

@@ -1,10 +1,9 @@
-from dataclasses import dataclass
 
 import pytest
 
-import psu_cli.transport as transport
-from psu_cli.errors import ProtocolError, TransportError
-from psu_cli.transport import PortInfo, SerialTransport, select_ports
+import nps3010_cli.transport as transport
+from nps3010_cli.errors import ProtocolError, TransportError
+from nps3010_cli.transport import SerialTransport, select_ports
 
 
 def test_encode():

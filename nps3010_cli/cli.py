@@ -1,4 +1,4 @@
-"""Command-line upper computer for up to two custom PSUs."""
+"""Command-line upper computer for up to two NPS3010 units."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__
-from .errors import PSUError, ProtocolError, TransportError
-from .instrument import PSU
+from .errors import NPS3010Error, ProtocolError, TransportError
+from .instrument import NPS3010
 from .transport import SerialTransport, discover, select_ports
 
 
@@ -22,9 +22,9 @@ def emit(value: object) -> None:
 
 
 def parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="psuctl", description="Control up to two custom CH340 bench PSUs")
+    ap = argparse.ArgumentParser(prog="nps3010", description="Control up to two NPS3010 bench power supplies")
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    ap.add_argument("--port", action="append", help="serial port, repeat for two PSUs")
+    ap.add_argument("--port", action="append", help="serial port, repeat for two NPS3010 units")
     ap.add_argument("--device", choices=("1", "2", "all"), default="1", help="physical USB slot (default: 1)")
     ap.add_argument("--timeout", type=float, default=1.0, help="seconds per command attempt")
     ap.add_argument("--retries", type=int, default=10, help="retries for the slow isolated UART")
@@ -73,16 +73,16 @@ def state_record(slot: int, port: str, state, sequence: int | None = None) -> di
     return record | state.to_dict()
 
 
-def connect_all(args: argparse.Namespace, stack: ExitStack) -> list[tuple[int, str, PSU]]:
+def connect_all(args: argparse.Namespace, stack: ExitStack) -> list[tuple[int, str, NPS3010]]:
     selected = select_ports(args.port, args.device)
     result = []
     for slot, port in selected:
         transport = stack.enter_context(SerialTransport(port, args.timeout, args.retries))
-        result.append((slot, port, PSU(transport)))
+        result.append((slot, port, NPS3010(transport)))
     return result
 
 
-def monitor(args: argparse.Namespace, devices: list[tuple[int, str, PSU]]) -> None:
+def monitor(args: argparse.Namespace, devices: list[tuple[int, str, NPS3010]]) -> None:
     if args.interval < 0.1 or args.count < 0 or args.duration < 0:
         raise ProtocolError("interval must be >= 0.1; count/duration cannot be negative")
     output = args.output.open("w", newline="", encoding="utf-8") if args.output else sys.stdout
@@ -103,8 +103,8 @@ def monitor(args: argparse.Namespace, devices: list[tuple[int, str, PSU]]) -> No
         ):
             tick = time.monotonic()
             sequence += 1
-            for slot, port, psu in devices:
-                record = state_record(slot, port, psu.state(), sequence)
+            for slot, port, supply in devices:
+                record = state_record(slot, port, supply.state(), sequence)
                 if writer:
                     writer.writerow(record)
                     output.flush()
@@ -120,12 +120,12 @@ def monitor(args: argparse.Namespace, devices: list[tuple[int, str, PSU]]) -> No
             output.close()
 
 
-def capture_telemetry(args: argparse.Namespace, devices: list[tuple[int, str, PSU]]) -> None:
+def capture_telemetry(args: argparse.Namespace, devices: list[tuple[int, str, NPS3010]]) -> None:
     if len(devices) != 1:
-        raise ProtocolError("telemetry capture supports one selected PSU")
+        raise ProtocolError("telemetry capture supports one selected NPS3010")
     if args.count < 0 or args.duration < 0 or (not args.count and not args.duration):
         raise ProtocolError("telemetry requires positive --count or --duration")
-    slot, port, psu = devices[0]
+    slot, port, supply = devices[0]
     output = args.output.open("w", newline="", encoding="utf-8") if args.output else sys.stdout
     fields = ["timestamp", "slot", "port", "version", "sequence", "device_time_ms",
               "voltage_v", "current_a", "power_w", "output", "constant_current",
@@ -134,7 +134,7 @@ def capture_telemetry(args: argparse.Namespace, devices: list[tuple[int, str, PS
     if writer:
         writer.writeheader()
     try:
-        for item in psu.transport.telemetry(args.duration, args.count):
+        for item in supply.transport.telemetry(args.duration, args.count):
             record = {"timestamp": timestamp(), "slot": slot, "port": port} | item.to_dict()
             if writer:
                 writer.writerow(record)
@@ -162,21 +162,25 @@ def run(args: argparse.Namespace) -> int:
         if args.command == "telemetry":
             capture_telemetry(args, devices)
             return 0
-        for slot, port, psu in devices:
+        for slot, port, supply in devices:
             if args.command == "state":
-                result = psu.state().to_dict()
+                result = supply.state().to_dict()
             elif args.command == "read-adc":
-                result = psu.read_adc().to_dict()
+                result = supply.read_adc().to_dict()
             elif args.command == "set":
-                result = psu.set_targets(args.voltage, args.current).to_dict()
+                supply.set_targets(args.voltage, args.current)
+                continue
             elif args.command == "output":
-                result = psu.output(args.state == "on").to_dict()
+                supply.output(args.state == "on")
+                continue
             elif args.command == "zero":
-                result = psu.zero().to_dict()
+                supply.zero()
+                continue
             elif args.command == "view":
-                result = psu.view(args.mode).to_dict()
+                supply.view(args.mode)
+                continue
             elif args.command == "raw":
-                result = {"response": psu.transport.command(args.line)}
+                result = {"response": supply.transport.command(args.line)}
             else:
                 raise AssertionError("unreachable")
             emit({"slot": slot, "port": port} | result)
@@ -188,8 +192,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return run(args)
     except TransportError as exc:
-        print(f"psuctl: {exc}", file=sys.stderr)
+        print(f"nps3010: {exc}", file=sys.stderr)
         return 4
-    except (ProtocolError, PSUError) as exc:
-        print(f"psuctl: {exc}", file=sys.stderr)
+    except (ProtocolError, NPS3010Error) as exc:
+        print(f"nps3010: {exc}", file=sys.stderr)
         return 5

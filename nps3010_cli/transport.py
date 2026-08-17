@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from typing import Callable
 
 import serial
 from serial.tools import list_ports
@@ -18,7 +18,6 @@ from .protocol import (
     parse_state,
     parse_telemetry,
 )
-
 
 VID = 0x1A86
 PID = 0x7523
@@ -68,7 +67,7 @@ class SerialTransport:
         self.quiet = quiet
         self._serial: serial.Serial | None = None
 
-    def open(self) -> "SerialTransport":
+    def open(self) -> SerialTransport:
         try:
             self._serial = serial.Serial(
                 self.port,
@@ -205,7 +204,7 @@ class SerialTransport:
             matched += 1
             yield record
 
-    def __enter__(self) -> "SerialTransport":
+    def __enter__(self) -> "SerialTransport":  # noqa: UP037
         return self.open()
 
     def __exit__(self, exc_type, exc, traceback) -> None:
@@ -244,11 +243,11 @@ def select_ports(explicit: list[str] | None, device: str) -> list[tuple[int, str
             f"{len(paths)} CH340/explicit ports found; this controller supports at most two"
         )
     if not paths:
-        raise TransportError("no CH340 serial port found; connect a PSU or use --port")
+        raise TransportError("no CH340 serial port found; connect an NPS3010 or use --port")
     indexed = list(enumerate(paths, 1))
     if device == "all":
         return indexed
     slot = int(device)
     if slot > len(indexed):
-        raise TransportError(f"PSU slot {slot} is not connected")
+        raise TransportError(f"NPS3010 slot {slot} is not connected")
     return [indexed[slot - 1]]

@@ -1,10 +1,10 @@
-class PSUError(Exception):
+class NPS3010Error(Exception):
     """Base error shown without a traceback by the CLI."""
 
 
-class TransportError(PSUError):
+class TransportError(NPS3010Error):
     """Serial transport failed."""
 
 
-class ProtocolError(PSUError):
+class ProtocolError(NPS3010Error):
     """The board response did not match the firmware protocol."""

@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import re
 import binascii
+import re
 import struct
 from dataclasses import asdict, dataclass
 
 from .errors import ProtocolError
-
 
 STATE_RE = re.compile(
     r"^STATE output=(?P<output>[01]) "

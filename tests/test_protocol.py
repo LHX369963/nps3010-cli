@@ -2,8 +2,8 @@ import struct
 
 import pytest
 
-from psu_cli.errors import ProtocolError
-from psu_cli.protocol import crc16_ccitt, parse_adc, parse_state, parse_telemetry
+from nps3010_cli.errors import ProtocolError
+from nps3010_cli.protocol import crc16_ccitt, parse_adc, parse_state, parse_telemetry
 
 
 def test_parse_state():
