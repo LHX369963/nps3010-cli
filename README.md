@@ -18,7 +18,7 @@ udev rules, and reconnect the adapter.
 
 ```bash
 nps3010 --device 1 set --voltage 12 --current 1.5
-nps3010 --device 1 measure
+nps3010 --device 1 readback
 nps3010 --device 1 output on
 nps3010 --device 1 output off
 ```

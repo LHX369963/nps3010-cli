@@ -52,10 +52,10 @@ def test_second_device_selection(monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)["port"] == "/dev/b"
 
 
-def test_measure_aggregates_internally(monkeypatch, capsys):
+def test_readback_aggregates_internally(monkeypatch, capsys):
     monkeypatch.setattr(cli, "SerialTransport", FakeContext)
     assert cli.main([
-        "--port", "/dev/test", "measure", "--samples", "3",
+        "--port", "/dev/test", "readback", "--samples", "3",
         "--min-interval", "0", "--max-interval", "0",
     ]) == 0
     assert capsys.readouterr().out == "0.0 V 0.0 A vspread=0 aspread=0\n"

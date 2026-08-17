@@ -1,4 +1,4 @@
 interface:
   display_name: "NPS3010 CLI"
-  short_description: "Control and measure the connected NPS3010 supplies"
+  short_description: "Control and read back the connected NPS3010 supplies"
   default_prompt: "Use $nps3010-cli to perform the requested NPS3010 operation directly."

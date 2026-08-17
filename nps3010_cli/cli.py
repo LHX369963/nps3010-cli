@@ -32,12 +32,12 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--retries", type=int, default=10, help="retries for the slow isolated UART")
     sub = ap.add_subparsers(dest="command", required=True)
     sub.add_parser("list", help="list and probe attached CH340 adapters")
-    sub.add_parser("state", help="read setpoints, measurements and output state")
-    measure = sub.add_parser("measure", help="sample repeatedly and return one summary")
-    measure.add_argument("--samples", type=int, default=7)
-    measure.add_argument("--min-interval", type=int, default=120, metavar="MS")
-    measure.add_argument("--max-interval", type=int, default=380, metavar="MS")
-    measure.add_argument("--json", action="store_true")
+    sub.add_parser("state", help="read setpoints, output readback, and output state")
+    readback = sub.add_parser("readback", help="sample output readback and return one summary")
+    readback.add_argument("--samples", type=int, default=7)
+    readback.add_argument("--min-interval", type=int, default=120, metavar="MS")
+    readback.add_argument("--max-interval", type=int, default=380, metavar="MS")
+    readback.add_argument("--json", action="store_true")
     sub.add_parser("read-adc", help="read raw ADC codes and ADC pin voltages")
 
     setting = sub.add_parser("set", help="set calibrated voltage/current targets")
@@ -154,11 +154,11 @@ def capture_telemetry(args: argparse.Namespace, devices: list[tuple[int, str, NP
             output.close()
 
 
-def measure(args: argparse.Namespace, devices: list[tuple[int, str, NPS3010]]) -> None:
+def readback(args: argparse.Namespace, devices: list[tuple[int, str, NPS3010]]) -> None:
     if args.samples <= 0:
         raise ProtocolError("samples must be positive")
     if not 0 <= args.min_interval <= args.max_interval <= 10000:
-        raise ProtocolError("measurement intervals require 0 <= min <= max <= 10000 ms")
+        raise ProtocolError("readback intervals require 0 <= min <= max <= 10000 ms")
     samples: dict[int, list] = {slot: [] for slot, _, _ in devices}
     for index in range(args.samples):
         for slot, _, supply in devices:
@@ -213,8 +213,8 @@ def run(args: argparse.Namespace) -> int:
         if args.command == "monitor":
             monitor(args, devices)
             return 0
-        if args.command == "measure":
-            measure(args, devices)
+        if args.command == "readback":
+            readback(args, devices)
             return 0
         if args.command == "telemetry":
             capture_telemetry(args, devices)
