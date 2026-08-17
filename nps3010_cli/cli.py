@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import random
+import statistics
 import sys
 import time
 from contextlib import ExitStack
@@ -25,12 +27,17 @@ def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="nps3010", description="Control up to two NPS3010 bench power supplies")
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     ap.add_argument("--port", action="append", help="serial port, repeat for two NPS3010 units")
-    ap.add_argument("--device", choices=("1", "2", "all"), default="1", help="physical USB slot (default: 1)")
+    ap.add_argument("--device", choices=("1", "2", "all"), help="required only when multiple units are attached")
     ap.add_argument("--timeout", type=float, default=1.0, help="seconds per command attempt")
     ap.add_argument("--retries", type=int, default=10, help="retries for the slow isolated UART")
     sub = ap.add_subparsers(dest="command", required=True)
     sub.add_parser("list", help="list and probe attached CH340 adapters")
     sub.add_parser("state", help="read setpoints, measurements and output state")
+    measure = sub.add_parser("measure", help="sample repeatedly and return one summary")
+    measure.add_argument("--samples", type=int, default=7)
+    measure.add_argument("--min-interval", type=int, default=120, metavar="MS")
+    measure.add_argument("--max-interval", type=int, default=380, metavar="MS")
+    measure.add_argument("--json", action="store_true")
     sub.add_parser("read-adc", help="read raw ADC codes and ADC pin voltages")
 
     setting = sub.add_parser("set", help="set calibrated voltage/current targets")
@@ -147,6 +154,53 @@ def capture_telemetry(args: argparse.Namespace, devices: list[tuple[int, str, NP
             output.close()
 
 
+def measure(args: argparse.Namespace, devices: list[tuple[int, str, NPS3010]]) -> None:
+    if args.samples <= 0:
+        raise ProtocolError("samples must be positive")
+    if not 0 <= args.min_interval <= args.max_interval <= 10000:
+        raise ProtocolError("measurement intervals require 0 <= min <= max <= 10000 ms")
+    samples: dict[int, list] = {slot: [] for slot, _, _ in devices}
+    for index in range(args.samples):
+        for slot, _, supply in devices:
+            samples[slot].append(supply.state())
+        if index + 1 < args.samples:
+            time.sleep(random.uniform(args.min_interval, args.max_interval) / 1000)
+    for slot, port, _ in devices:
+        states = samples[slot]
+        voltages = [state.voltage_v for state in states]
+        currents = [state.current_a for state in states]
+        voltage = statistics.median(voltages)
+        current = statistics.median(currents)
+        voltage_spread = max(voltages) - min(voltages)
+        current_spread = max(currents) - min(currents)
+        warnings = []
+        if voltage_spread > max(abs(voltage) * 0.02, 0.003):
+            warnings.append(f"D{slot}.voltage={min(voltages):.6g}..{max(voltages):.6g}")
+        if current_spread > max(abs(current) * 0.02, 0.003):
+            warnings.append(f"D{slot}.current={min(currents):.6g}..{max(currents):.6g}")
+        faults = {state.fault for state in states if state.fault != "NONE"}
+        if faults:
+            warnings.append(f"D{slot}.fault={','.join(sorted(faults))}")
+        if warnings:
+            print("warning: " + " ".join(warnings), file=sys.stderr)
+        if args.json:
+            emit({
+                "slot": slot,
+                "port": port,
+                "voltage_v": voltage,
+                "current_a": current,
+                "voltage_spread_v": voltage_spread,
+                "current_spread_a": current_spread,
+                "samples": len(states),
+            })
+        else:
+            prefix = f"D{slot} " if len(devices) > 1 else ""
+            print(
+                f"{prefix}{voltage} V {current} A "
+                f"vspread={voltage_spread:.8g} aspread={current_spread:.8g}"
+            )
+
+
 def run(args: argparse.Namespace) -> int:
     if args.timeout <= 0 or args.retries < 0:
         raise ProtocolError("timeout must be positive and retries cannot be negative")
@@ -158,6 +212,9 @@ def run(args: argparse.Namespace) -> int:
         devices = connect_all(args, stack)
         if args.command == "monitor":
             monitor(args, devices)
+            return 0
+        if args.command == "measure":
+            measure(args, devices)
             return 0
         if args.command == "telemetry":
             capture_telemetry(args, devices)

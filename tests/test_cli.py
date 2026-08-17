@@ -27,6 +27,12 @@ def test_state_json(monkeypatch, capsys):
     assert result["set_voltage_v"] == 5
 
 
+def test_multiple_units_require_explicit_selection(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "SerialTransport", FakeContext)
+    assert cli.main(["--port", "/dev/a", "--port", "/dev/b", "state"]) == 4
+    assert "multiple NPS3010" in capsys.readouterr().err
+
+
 def test_second_device_selection(monkeypatch, capsys):
     monkeypatch.setattr(cli, "SerialTransport", FakeContext)
     assert (
@@ -44,3 +50,12 @@ def test_second_device_selection(monkeypatch, capsys):
         == 0
     )
     assert json.loads(capsys.readouterr().out)["port"] == "/dev/b"
+
+
+def test_measure_aggregates_internally(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "SerialTransport", FakeContext)
+    assert cli.main([
+        "--port", "/dev/test", "measure", "--samples", "3",
+        "--min-interval", "0", "--max-interval", "0",
+    ]) == 0
+    assert capsys.readouterr().out == "0.0 V 0.0 A vspread=0 aspread=0\n"

@@ -233,7 +233,7 @@ def discover(timeout: float, retries: int) -> list[dict]:
     return found
 
 
-def select_ports(explicit: list[str] | None, device: str) -> list[tuple[int, str]]:
+def select_ports(explicit: list[str] | None, device: str | None) -> list[tuple[int, str]]:
     if explicit:
         paths = list(dict.fromkeys(explicit))
     else:
@@ -245,6 +245,12 @@ def select_ports(explicit: list[str] | None, device: str) -> list[tuple[int, str
     if not paths:
         raise TransportError("no CH340 serial port found; connect an NPS3010 or use --port")
     indexed = list(enumerate(paths, 1))
+    if device is None:
+        if len(indexed) == 1:
+            return indexed
+        raise TransportError(
+            "multiple NPS3010 units found; specify --device 1, --device 2, or --device all"
+        )
     if device == "all":
         return indexed
     slot = int(device)
