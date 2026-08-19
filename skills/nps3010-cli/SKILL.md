@@ -8,6 +8,7 @@ description: Control NPS3010 supplies and read back their outputs.
 Use `nps3010/.venv/bin/nps3010` from the instrument-cli workspace. Omit device
 selection when unambiguous; if the CLI reports ambiguity, use the selector named
 in that error. Execute the request directly.
+Do not scan processes or query preliminary state.
 
 Common forms:
 
